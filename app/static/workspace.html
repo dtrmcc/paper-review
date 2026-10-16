@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>审稿 · areview</title>
+<link rel="stylesheet" href="/static/app.css">
+<link rel="stylesheet" href="/static/vendor/pdf_viewer.css">
+<link rel="stylesheet" href="/static/workspace.css">
+</head>
+<body class="ws">
+<div class="topbar">
+  <a class="brand" href="/" title="返回任务列表">← a<span>review</span></a>
+  <div class="ptitle"><b id="pTitle"></b><span class="muted small" id="pJournal"></span></div>
+  <span id="pDeadline"></span>
+  <span class="spacer"></span>
+  <span id="pPolicy" class="pill" style="cursor:pointer" title="点击修改期刊 AI 政策"></span>
+  <select id="pStatus" style="width:auto"></select>
+  <select id="pRec" style="width:auto" title="推荐结论"></select>
+  <button id="pSettings" title="任务设置">⚙ 任务</button>
+</div>
+<div class="main">
+  <section class="left" id="left">
+    <div class="vtools">
+      <select id="docSel" style="width:auto;max-width:220px"></select>
+      <button class="icon" id="upVer" title="上传新版本 / 回复信 / 附件">⤒ 上传</button>
+      <a id="dlOrig" class="small" target="_blank" title="下载原始文件">原文件</a>
+      <span class="sep"></span>
+      <button class="icon" id="zOut">−</button><span id="zLvl" class="small">100%</span><button class="icon" id="zIn">＋</button>
+      <button class="icon" id="zFit" title="适合宽度">↔</button>
+      <span class="sep"></span>
+      <input id="pgIn" type="text" style="width:44px;text-align:center"> <span class="small muted" id="pgTot"></span>
+      <span class="sep"></span>
+      <button class="icon" id="noteBtn" title="在页面上放置便签">📌 便签</button>
+      <span class="sep"></span>
+      <input id="findIn" type="text" placeholder="搜索全文" style="width:130px">
+      <span id="findRes" class="small muted"></span>
+      <span class="spacer"></span>
+      <span class="small muted" id="procState"></span>
+    </div>
+    <div class="viewer" id="viewer"></div>
+  </section>
+  <div class="split" id="split" title="拖动调整宽度"></div>
+  <section class="right" id="right">
+    <nav class="tabs">
+      <button data-tab="notes" class="on">笔记</button>
+      <button data-tab="chat">AI 讨论</button>
+      <button data-tab="review">审稿意见</button>
+      <button data-tab="tools">工具箱</button>
+      <button data-tab="anns">标注 <span id="annCount" class="pill"></span></button>
+    </nav>
+
+    <div class="tab on" id="tab-notes">
+      <div class="row"><span class="small muted">零碎想法随手记，自动保存</span><span class="spacer"></span>
+        <span id="saveState" class="small"></span><button class="small" id="histBtn">历史版本</button></div>
+      <textarea id="notes" spellcheck="true" placeholder="随手记下审稿想法……&#10;例如：&#10;- methods: sample size 太小？没有 power analysis&#10;- Fig 3 y轴单位不对&#10;- 讨论部分 overclaim causal"></textarea>
+    </div>
+
+    <div class="tab" id="tab-chat">
+      <div class="policybar" id="chatPolicy"></div>
+      <div class="msgs" id="msgs"></div>
+      <div class="composer">
+        <div class="row wrap small">
+          <select id="chatProv" style="width:auto"></select>
+          <label class="inline"><input type="checkbox" id="chatNotes" checked> 附带我的笔记</label>
+          <label class="inline"><input type="checkbox" id="chatMs"> 附带稿件文本（已遮挡）</label>
+          <span class="spacer"></span><button class="small" id="chatClear" title="清空对话记录">清空</button>
+        </div>
+        <div class="row"><textarea id="chatIn" rows="3" placeholder="和 AI 讨论你的审稿意见…（Ctrl+Enter 发送）"></textarea>
+          <button class="primary" id="chatSend">发送</button></div>
+      </div>
+    </div>
+
+    <div class="tab" id="tab-review">
+      <div class="policybar" id="revPolicy"></div>
+      <div class="row wrap">
+        <div class="seg" id="revKind"><button data-k="authors" class="on">给作者</button><button data-k="editor">给编辑（保密）</button></div>
+        <select id="revProv" style="width:auto"></select>
+        <label class="inline small"><input type="checkbox" id="revMs"> 附带稿件文本</label>
+      </div>
+      <textarea id="revInstr" rows="2" placeholder="额外要求（可选）：如“语气温和一些”、“只保留三个主要问题”、“用中文”"></textarea>
+      <div class="row"><span class="small muted">根据笔记、标注批注和讨论记录，用你的语气整理成文</span><span class="spacer"></span><button class="primary" id="revGen">生成意见</button></div>
+      <textarea id="revOut" rows="16" placeholder="生成的意见会出现在这里，可以直接修改。"></textarea>
+      <div class="row"><span class="small muted" id="revInfo"></span><span class="spacer"></span>
+        <button class="small" id="revCopy">复制</button><button class="small primary" id="revSave">保存为新版本</button></div>
+      <h4 style="margin:12px 0 4px">已保存的版本</h4>
+      <div id="revList" class="small"></div>
+    </div>
+
+    <div class="tab" id="tab-tools">
+      <div id="toolHome" class="toolgrid"></div>
+      <div id="toolView" class="hidden">
+        <div class="row"><button class="small" id="toolBack">← 工具箱</button><b id="toolName"></b><span class="spacer"></span>
+          <a id="toolPop" class="small" target="_blank">在新窗口打开 ↗</a></div>
+        <div id="toolBody"></div>
+      </div>
+    </div>
+
+    <div class="tab" id="tab-anns">
+      <div class="row small"><span class="muted">点击跳转。批注会自动用于生成审稿意见。</span><span class="spacer"></span><button class="small" id="annsToNotes">全部批注 → 笔记</button></div>
+      <div id="annList"></div>
+    </div>
+  </section>
+</div>
+<script src="/static/common.js"></script>
+<script type="module" src="/static/workspace.js"></script>
+</body>
+</html>

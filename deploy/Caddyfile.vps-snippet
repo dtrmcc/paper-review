@@ -1,0 +1,22 @@
+# Template: append to the Caddyfile of the HTTPS front-door proxy on your VPS.
+# Replace review.example.com with your own (sub)domain.
+review.example.com {
+	request_body {
+		max_size 250MB
+	}
+	reverse_proxy 127.0.0.1:18089 {
+		flush_interval -1
+		transport http {
+			read_timeout 900s
+			dial_timeout 5s
+		}
+	}
+	handle_errors 502 503 504 {
+		header Content-Type "text/html; charset=utf-8"
+		respond `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Offline</title><body style="font-family:system-ui,sans-serif;max-width:32rem;margin:15vh auto;padding:0 1rem;color:#333"><h1>areview is offline</h1><p>The review workstation cannot be reached right now.</p>` 503
+	}
+	header {
+		X-Robots-Tag "noindex, nofollow"
+		Strict-Transport-Security "max-age=31536000"
+	}
+}

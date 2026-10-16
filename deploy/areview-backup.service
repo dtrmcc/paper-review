@@ -1,0 +1,6 @@
+[Unit]
+Description=areview daily backup
+
+[Service]
+Type=oneshot
+ExecStart=%h/paper-review/deploy/backup.sh

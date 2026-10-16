@@ -1,0 +1,43 @@
+# areview — local paper-review workspace.
+# Start:  docker compose up -d --build      (from ~/paper-review)
+# Reachable only on this computer at http://127.0.0.1:8089; the VPS reaches it via the SSH tunnel
+# (user service areview-tunnel). Manuscripts stay in ./data on this laptop.
+name: paper-review
+services:
+  app:
+    build: ./app
+    image: paper-review-app:latest
+    env_file: .env
+    environment:
+      DATA_DIR: /data
+      GROBID_URL: http://grobid:8070
+      OLLAMA_URL: http://ollama:11434
+    volumes:
+      - ./data:/data
+    ports:
+      - "127.0.0.1:8089:8000"
+    depends_on: [grobid, ollama]
+    restart: unless-stopped
+    mem_limit: 2g
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Local PDF parser for structure & references (no network needed)
+  grobid:
+    image: lfoppiano/grobid:0.8.1
+    restart: unless-stopped
+    mem_limit: 3g
+
+  # Local LLM (CPU). Models stored in ./ollama
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ./ollama:/root/.ollama
+    environment:
+      OLLAMA_KEEP_ALIVE: 10m
+      OLLAMA_NUM_PARALLEL: 1
+    restart: unless-stopped
+    mem_limit: 9g

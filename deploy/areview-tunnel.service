@@ -1,0 +1,14 @@
+[Unit]
+Description=areview: SSH tunnel so the VPS front door can reach this machine
+After=network-online.target
+
+[Service]
+# Template: replace my-vps with the ~/.ssh/config alias of your VPS.
+# VPS 127.0.0.1:18089 (loopback only) -> this laptop 127.0.0.1:8089 (areview app, login enforced)
+ExecStart=/usr/bin/ssh -N -o BatchMode=yes -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o TCPKeepAlive=yes -R 127.0.0.1:18089:127.0.0.1:8089 my-vps
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=0
+
+[Install]
+WantedBy=default.target

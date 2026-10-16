@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>文献核查 · areview</title>
+<link rel="stylesheet" href="/static/app.css">
+<style>
+  .page-wrap { max-width: 1400px; }
+  .filters button { margin-right: 4px; }
+  td.ref { max-width: 460px; }
+  td.ref .raw { font-size: 13px; }
+  td.rec { max-width: 360px; font-size: 13px; }
+  .links a { margin-right: 8px; font-size: 12px; white-space: nowrap; }
+  .issues { color: var(--warn); font-size: 12px; }
+  .scite { font-size: 12px; white-space: nowrap; }
+  .scite .s { color: var(--ok); } .scite .c { color: var(--bad); }
+  tr.st-retracted { background: #fff3f3; }
+  tr.st-notfound { background: #fff8f8; }
+  .note-in { font-size: 12px; padding: 3px 6px; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <a class="brand" href="/">a<span>review</span></a>
+  <a id="back" href="#">← 返回审稿</a>
+  <b id="title"></b>
+  <span class="spacer"></span>
+  <select id="docSel" style="width:auto"></select>
+</div>
+<div class="page-wrap">
+  <div class="row wrap" style="margin-bottom:10px">
+    <div class="filters" id="filters"></div>
+    <span class="spacer"></span>
+    <span id="job" class="small muted"></span>
+    <button class="small" id="rerunPending">核查未完成的</button>
+    <button class="small" id="rerunAll">全部重新核查</button>
+    <button class="small" id="copyProblems">复制问题清单</button>
+  </div>
+  <div class="bar" style="margin-bottom:12px"><i id="prog" style="width:0"></i></div>
+  <p class="small muted">核查来源：Crossref（含 Retraction Watch 撤稿数据）、OpenAlex、Semantic Scholar、<span id="sciteState"></span>。
+    所有查询都由本机发出（走校园网），只发送已发表文献的书目信息。Google Scholar 不支持自动查询，请点击每条后面的链接人工查看。</p>
+  <div class="card" style="overflow:auto"><table class="grid" id="tbl"></table></div>
+</div>
+<script src="/static/common.js"></script>
+<script>
+const pid = +location.pathname.split("/")[2];
+let refs = [], filter = "all", docId;
+const ST = { ok: ["ok", "已核实"], mismatch: ["warn", "信息不符"], notfound: ["bad", "未找到"], retracted: ["dark", "撤稿"], pending: ["", "待核查"], error: ["", "出错"] };
+$("#back").href = "/p/" + pid;
+
+async function init() {
+  const p = await api(`/api/projects/${pid}`);
+  $("#title").textContent = p.title;
+  const ms = p.docs.filter((d) => d.kind === "manuscript");
+  $("#docSel").innerHTML = ms.map((d) => `<option value="${d.id}">${esc(d.label)} · ${esc(d.filename)}</option>`).join("");
+  docId = ms.length ? ms[ms.length - 1].id : null;
+  $("#docSel").value = docId;
+  $("#docSel").onchange = (e) => { docId = +e.target.value; load(); };
+  load();
+}
+async function load() {
+  if (!docId) { $("#tbl").innerHTML = "<tr><td>没有稿件</td></tr>"; return; }
+  const d = await api(`/api/documents/${docId}/refs`);
+  refs = d.refs;
+  $("#sciteState").innerHTML = d.scite ? "scite.ai（Smart Citations 计数与编辑声明）" : "scite.ai <span class='pill warn'>未配置 token，请在设置页填写</span>";
+  const j = d.job;
+  const running = j && j.status === "running";
+  $("#job").textContent = j ? (running ? "核查中 " + (j.progress || "") : j.status === "failed" ? "失败：" + (j.error || "") : "完成 " + fmtTime(j.updated)) : "";
+  const done = refs.filter((r) => !["pending"].includes(r.status)).length;
+  $("#prog").style.width = (refs.length ? done / refs.length * 100 : 0) + "%";
+  renderFilters(); render();
+  if (running) setTimeout(load, 4000);
+}
+function renderFilters() {
+  const c = (s) => refs.filter((r) => r.status === s).length;
+  const fs = [["all", `全部 ${refs.length}`], ["problems", `需关注 ${c("mismatch") + c("notfound") + c("retracted")}`], ["ok", `已核实 ${c("ok")}`], ["mismatch", `信息不符 ${c("mismatch")}`], ["notfound", `未找到 ${c("notfound")}`], ["retracted", `撤稿 ${c("retracted")}`], ["pending", `待核查 ${c("pending") + c("error")}`]];
+  $("#filters").innerHTML = fs.map(([k, t]) => `<button class="small ${filter === k ? "active" : ""}" data-f="${k}">${t}</button>`).join("");
+  $$("#filters button").forEach((b) => b.onclick = () => { filter = b.dataset.f; renderFilters(); render(); });
+}
+function q(s) { return encodeURIComponent(s || ""); }
+function render() {
+  const rows = refs.filter((r) => filter === "all" || (filter === "problems" ? ["mismatch", "notfound", "retracted"].includes(r.status) : filter === "pending" ? ["pending", "error"].includes(r.status) : r.status === filter));
+  $("#tbl").innerHTML = `<tr><th>#</th><th>状态</th><th>稿件中的引用</th><th>找到的记录</th><th>scite</th><th>链接 / 操作</th></tr>` + rows.map((r) => {
+    const res = r.result || {}, b = res.best, [cls, label] = ST[r.status] || ["", r.status];
+    const sc = (res.scite || {}).tallies;
+    const doi = res.doi_used || r.doi;
+    const title = r.title || r.raw;
+    return `<tr class="st-${r.status}" data-id="${r.id}">
+      <td>${r.idx}</td>
+      <td><span class="pill ${cls}">${label}</span>${r.user_flag ? `<div class="small"><span class="pill blue">${r.user_flag === "ok" ? "我已确认" : "我标记有问题"}</span></div>` : ""}</td>
+      <td class="ref"><div class="raw">${esc(r.raw)}</div>${r.title && r.raw !== r.title ? `<div class="small muted">解析标题：${esc(r.title)}</div>` : ""}
+        ${(res.issues || []).map((i) => `<div class="issues">⚠ ${esc(i)}</div>`).join("")}${res.error ? `<div class="issues">${esc(res.error)}</div>` : ""}
+        <input class="note-in" type="text" placeholder="我的备注" value="${esc(r.user_note || "")}" data-note></td>
+      <td class="rec">${b ? `<div>${esc(b.title)}</div><div class="muted small">${esc((b.authors || []).slice(0, 3).join(", "))}${b.authors && b.authors.length > 3 ? " et al." : ""} · ${esc(b.year)} · ${esc(b.venue || "")}</div>
+        <div class="small muted">来源 ${esc(b.src)} · 相似度 ${b.score}${b.doi ? ` · <a href="https://doi.org/${esc(b.doi)}" target="_blank" rel="noreferrer">${esc(b.doi)}</a>` : ""}</div>` : "<span class='muted'>—</span>"}
+        ${res.openalex && res.openalex.cited_by != null ? `<div class="small muted">被引 ${res.openalex.cited_by}</div>` : ""}</td>
+      <td class="scite">${sc ? `<span class="s" title="supporting">▲${sc.supporting ?? 0}</span> <span class="c" title="contrasting">▼${sc.contradicting ?? sc.contrasting ?? 0}</span> <span title="mentioning">●${sc.mentioning ?? 0}</span>` : (res.scite && res.scite.error ? `<span class="muted" title="${esc(res.scite.error)}">错误</span>` : "<span class='muted'>—</span>")}</td>
+      <td class="links">
+        <a href="https://scholar.google.com/scholar?q=${q('"' + title + '"')}" target="_blank" rel="noreferrer">Google Scholar</a>
+        ${doi ? `<a href="https://scite.ai/reports/${esc(doi)}" target="_blank" rel="noreferrer">scite</a>` : `<a href="https://scite.ai/search?q=${q(title)}" target="_blank" rel="noreferrer">scite</a>`}
+        ${doi ? `<a href="https://doi.org/${esc(doi)}" target="_blank" rel="noreferrer">DOI</a>` : ""}
+        ${res.openalex && res.openalex.id ? `<a href="${esc(res.openalex.id.replace("openalex.org", "openalex.org/works"))}" target="_blank" rel="noreferrer">OpenAlex</a>` : ""}
+        <div style="margin-top:4px"><button class="small" data-act="check">重查</button> <button class="small" data-act="ok">确认无误</button> <button class="small" data-act="bad">标记有问题</button></div></td></tr>`;
+  }).join("");
+  $$("#tbl tr[data-id]").forEach((tr) => {
+    const id = +tr.dataset.id;
+    tr.querySelectorAll("button[data-act]").forEach((b) => b.onclick = async () => {
+      if (b.dataset.act === "check") { b.textContent = "…"; const r = await api(`/api/refs/${id}/check`, { method: "POST" }); Object.assign(refs.find((x) => x.id === id), r); render(); renderFilters(); }
+      else { const f = b.dataset.act; const ref = refs.find((x) => x.id === id); ref.user_flag = ref.user_flag === f ? "" : f;
+        await api(`/api/refs/${id}`, { method: "PATCH", body: { user_flag: ref.user_flag } }); render(); }
+    });
+    tr.querySelector("[data-note]").onchange = (e) => api(`/api/refs/${id}`, { method: "PATCH", body: { user_note: e.target.value } }).then(() => toast("已保存"));
+  });
+}
+$("#rerunAll").onclick = async () => { if (await confirmBox("重新核查", "重新核查全部参考文献？")) { await api(`/api/documents/${docId}/refs/check`, { method: "POST" }); load(); } };
+$("#rerunPending").onclick = async () => { await api(`/api/documents/${docId}/refs/check?only_pending=true`, { method: "POST" }); load(); };
+$("#copyProblems").onclick = () => {
+  const bad = refs.filter((r) => ["mismatch", "notfound", "retracted"].includes(r.status) || r.user_flag === "bad");
+  copyText(bad.map((r) => `Ref ${r.idx}: ${r.raw}\n  -> ${ST[r.status][1]}${(r.result.issues || []).length ? "; " + r.result.issues.join("; ") : ""}${r.user_note ? "; " + r.user_note : ""}`).join("\n"));
+};
+init();
+</script>
+</body>
+</html>

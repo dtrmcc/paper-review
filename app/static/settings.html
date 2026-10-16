@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>设置 · areview</title>
+<link rel="stylesheet" href="/static/app.css">
+<style>
+  .page-wrap { max-width: 820px; }
+  section.card { padding: 16px 20px; margin-bottom: 16px; }
+  section h2 { font-size: 16px; margin: 0 0 6px; }
+  .res { font-size: 12px; margin-top: 6px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<div class="topbar"><a class="brand" href="/">a<span>review</span></a><a href="/">← 任务列表</a><span class="spacer"></span><a href="/logout">退出</a></div>
+<div class="page-wrap">
+  <section class="card">
+    <h2>AI 模型</h2>
+    <p class="small muted">每个审稿任务另有“期刊 AI 政策”开关，这里只设置默认值和模型。</p>
+    <label>默认使用</label>
+    <select id="default_provider"><option value="local">本地模型（内容不出本机）</option><option value="together">Together AI（仅在任务允许时可用）</option></select>
+    <label>本地模型（Ollama）</label>
+    <div class="row"><select id="local_model"></select><input type="text" id="pullName" placeholder="拉取新模型，如 qwen3:14b" style="width:220px"><button id="pull">拉取</button></div>
+    <div class="res" id="pullRes"></div>
+    <div class="row" style="margin-top:6px"><button class="small" id="testLocal">测试本地模型</button><span class="res" id="testLocalRes"></span></div>
+    <label>Together 模型</label>
+    <select id="together_model"></select>
+    <label>Together API key</label>
+    <input type="password" id="together_api_key" autocomplete="off" placeholder="tgp_v1_...">
+    <div class="row" style="margin-top:6px"><button class="small" id="testTogether">测试 Together（只发送一句测试语）</button><span class="res" id="testTogetherRes"></span></div>
+  </section>
+
+  <section class="card">
+    <h2>我的写作风格样本</h2>
+    <p class="small muted">粘贴几段你以前写过的审稿意见（可去掉具体内容），生成意见时会模仿语气和措辞。只存在本机数据库；若使用 Together 生成，会作为提示的一部分发送。</p>
+    <textarea id="style_samples" rows="10"></textarea>
+  </section>
+
+  <section class="card">
+    <h2>文献核查</h2>
+    <label class="inline"><input type="checkbox" id="auto_refcheck"> 导入稿件后自动在后台核查参考文献</label><br>
+    <label class="inline"><input type="checkbox" id="use_semantic_scholar"> Crossref / OpenAlex 找不到时再查 Semantic Scholar</label>
+    <label>scite.ai API token（只在校园网可用；由本机直接访问 scite）</label>
+    <input type="password" id="scite_token" autocomplete="off">
+    <div class="row" style="margin-top:6px"><button class="small" id="testScite">测试 scite</button><span class="res" id="testSciteRes"></span></div>
+  </section>
+
+  <div class="row"><span class="spacer"></span><button class="primary" id="save">保存设置</button></div>
+
+  <section class="card" style="margin-top:20px">
+    <h2>修改登录密码</h2>
+    <div class="row"><input type="password" id="pwOld" placeholder="当前密码" autocomplete="current-password"><input type="password" id="pwNew" placeholder="新密码（至少 12 位）" autocomplete="new-password"><button id="pwBtn">修改</button></div>
+  </section>
+</div>
+<script src="/static/common.js"></script>
+<script>
+let s;
+async function fillModels(prov, sel, cur) {
+  const r = await api(`/api/settings/models/${prov}`);
+  const list = Array.isArray(r.models) ? r.models : [];
+  if (cur && !list.includes(cur)) list.unshift(cur);
+  $(sel).innerHTML = list.map((m) => `<option ${m === cur ? "selected" : ""}>${esc(m)}</option>`).join("");
+  if (r.models && r.models.error) $(sel).insertAdjacentHTML("afterend", `<div class="res" style="color:var(--bad)">${esc(r.models.error)}</div>`);
+}
+async function load() {
+  s = await api("/api/settings");
+  $("#default_provider").value = s.default_provider;
+  $("#together_api_key").value = s.together_api_key;
+  $("#scite_token").value = s.scite_token;
+  $("#style_samples").value = s.style_samples;
+  $("#auto_refcheck").checked = s.auto_refcheck === "1";
+  $("#use_semantic_scholar").checked = s.use_semantic_scholar === "1";
+  fillModels("local", "#local_model", s.local_model);
+  fillModels("together", "#together_model", s.together_model);
+}
+$("#save").onclick = async () => {
+  await api("/api/settings", { method: "PUT", body: {
+    default_provider: $("#default_provider").value, local_model: $("#local_model").value, together_model: $("#together_model").value,
+    together_api_key: $("#together_api_key").value, scite_token: $("#scite_token").value, style_samples: $("#style_samples").value,
+    auto_refcheck: $("#auto_refcheck").checked ? "1" : "0", use_semantic_scholar: $("#use_semantic_scholar").checked ? "1" : "0" } });
+  toast("已保存"); load();
+};
+async function test(prov, out) {
+  $(out).textContent = "测试中…（本地模型首次加载可能要 1 分钟）";
+  await $("#save").onclick();
+  const r = await api(`/api/settings/test/${prov}`, { method: "POST" });
+  $(out).textContent = r.ok ? `✓ ${r.model} 回复：${r.reply}` : "✗ " + r.error;
+}
+$("#testLocal").onclick = () => test("local", "#testLocalRes");
+$("#testTogether").onclick = () => test("together", "#testTogetherRes");
+$("#testScite").onclick = async () => {
+  await $("#save").onclick();
+  $("#testSciteRes").textContent = "测试中…";
+  const r = await api("/api/settings/test-scite", { method: "POST" });
+  $("#testSciteRes").textContent = r.ok ? "✓ 连接成功：" + JSON.stringify(r.result.tallies) : "✗ " + JSON.stringify(r.error || r.result);
+};
+$("#pull").onclick = async () => {
+  const name = $("#pullName").value.trim(); if (!name) return;
+  await api("/api/settings/pull-model", { method: "POST", body: { name } });
+  const poll = async () => {
+    const st = (await api("/api/settings/pull-model"))[name] || {};
+    const pct = st.total ? ` ${Math.round(100 * (st.completed || 0) / st.total)}%` : "";
+    $("#pullRes").textContent = `${name}: ${st.status || ""}${pct}${st.error ? " " + st.error : ""}`;
+    if (st.status !== "done" && st.status !== "error") setTimeout(poll, 2000); else fillModels("local", "#local_model", s.local_model);
+  };
+  poll();
+};
+$("#pwBtn").onclick = async () => {
+  try { await api("/api/settings/password", { method: "POST", body: { old: $("#pwOld").value, new: $("#pwNew").value } }); toast("密码已修改"); $("#pwOld").value = $("#pwNew").value = ""; }
+  catch (e) { toast(e.message, true); }
+};
+load();
+</script>
+</body>
+</html>

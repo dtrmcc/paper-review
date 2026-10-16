@@ -1,0 +1,13 @@
+# --- never commit: secrets, manuscripts, review data, models ---
+.env
+data/
+ollama/
+*.sqlite3*
+*.pdf
+*.doc
+*.docx
+*.odt
+*.rtf
+*.tar.gz
+__pycache__/
+*.pyc

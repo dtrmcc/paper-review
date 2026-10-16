@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>审稿任务 · areview</title>
+<link rel="stylesheet" href="/static/app.css">
+<style>
+  .head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .head h1 { font-size: 20px; margin: 0; }
+  .summary { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+  .summary .card { padding: 10px 16px; min-width: 120px; }
+  .summary b { font-size: 22px; display: block; }
+  .proj { display: grid; grid-template-columns: 170px 1fr 260px 120px; gap: 14px; padding: 14px 16px; align-items: center;
+    border-bottom: 1px solid var(--line); cursor: pointer; }
+  .proj:hover { background: #fafbff; }
+  .proj:last-child { border-bottom: 0; }
+  .proj .t { font-weight: 600; font-size: 15px; }
+  .proj .meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .prog { display: flex; flex-wrap: wrap; gap: 6px; font-size: 12px; }
+  .drop { border: 2px dashed var(--line); border-radius: 8px; padding: 18px; text-align: center; color: var(--muted); cursor: pointer; }
+  .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+  .policy label { font-weight: 400; margin: 4px 0; display: flex; gap: 8px; align-items: flex-start; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+  @media (max-width: 800px) { .proj { grid-template-columns: 1fr; gap: 6px; } .grid2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <a class="brand" href="/">a<span>review</span></a>
+  <span class="muted small">审稿工作台</span>
+  <div class="spacer"></div>
+  <a href="/settings">设置</a>
+  <a href="/logout">退出</a>
+</div>
+<div class="page-wrap">
+  <div class="head">
+    <h1>审稿任务</h1>
+    <select id="filter" style="width:auto">
+      <option value="active">进行中</option><option value="done">已提交 / 归档</option><option value="all">全部</option>
+    </select>
+    <div class="spacer"></div>
+    <button class="primary" id="new">＋ 新建审稿任务</button>
+  </div>
+  <div class="summary" id="summary"></div>
+  <div class="card" id="list"></div>
+</div>
+
+<script src="/static/common.js"></script>
+<script>
+let projects = [];
+async function load() {
+  projects = await api("/api/projects");
+  render();
+}
+function render() {
+  const f = $("#filter").value;
+  const list = projects.filter(p => f === "all" || (f === "active") === !["submitted", "archived"].includes(p.status));
+  const active = projects.filter(p => !["submitted", "archived"].includes(p.status));
+  const red = active.filter(p => ["red", "over"].includes(deadlineInfo(p.deadline).cls)).length;
+  $("#summary").innerHTML = `
+    <div class="card"><b>${active.length}</b><span class="muted">进行中</span></div>
+    <div class="card"><b style="color:var(--bad)">${red}</b><span class="muted">一周内到期 / 逾期</span></div>
+    <div class="card"><b>${projects.filter(p => p.status === "submitted").length}</b><span class="muted">已提交</span></div>`;
+  if (!list.length) { $("#list").innerHTML = `<div style="padding:30px;text-align:center" class="muted">暂无任务。点击右上角“新建审稿任务”。</div>`; return; }
+  $("#list").innerHTML = list.map(p => {
+    const r = p.refs || {};
+    const refTxt = r.n ? `文献 ${r.ok || 0}✓ ${r.bad ? `<span style="color:var(--bad)">${r.bad}⚠</span>` : ""} ${r.pending ? `· 核查中 ${r.pending}` : ""} / ${r.n}` : "文献 —";
+    return `<div class="proj" data-id="${p.id}">
+      <div>${deadlineBadge(p.deadline)}</div>
+      <div><div class="t">${esc(p.title)}</div>
+        <div class="meta">${esc(p.journal || "期刊未填")} ${p.manuscript_id ? "· " + esc(p.manuscript_id) : ""} · ${p.docs.map(d => esc(d.label)).join(" / ") || "无文件"}</div></div>
+      <div class="prog">
+        <span class="pill">笔记 ${p.note_words} 词</span><span class="pill">标注 ${p.annotations}</span>
+        <span class="pill">${refTxt}</span><span class="pill ${p.reviews ? "blue" : ""}">意见稿 ${p.reviews}</span>
+        <span class="pill ${POLICY_CLS[p.ai_policy]}">${POLICY[p.ai_policy]}</span>
+      </div>
+      <div><span class="pill ${p.status === "submitted" ? "ok" : p.status === "drafting" ? "blue" : ""}">${STATUS[p.status] || p.status}</span>
+        ${p.recommendation ? `<div class="small muted">${esc(REC[p.recommendation])}</div>` : ""}</div>
+    </div>`;
+  }).join("");
+  $$(".proj").forEach(el => el.onclick = () => location.href = "/p/" + el.dataset.id);
+}
+$("#filter").onchange = render;
+
+$("#new").onclick = () => {
+  const m = modal(`
+    <h2>新建审稿任务</h2>
+    <form id="nf">
+      <label>稿件标题 / 简称 *</label><input type="text" name="title" required placeholder="例如：Deep learning for ... (JAMA review)">
+      <div class="grid2">
+        <div><label>期刊</label><input type="text" name="journal" placeholder="期刊全名"></div>
+        <div><label>截止日期</label><input type="date" name="deadline"></div>
+        <div><label>稿件编号</label><input type="text" name="manuscript_id"></div>
+        <div><label>评审类型</label><select name="blind"><option value="unknown">未知</option><option value="single">单盲</option><option value="double">双盲</option><option value="open">公开</option></select></div>
+      </div>
+      <label>期刊主页 / Aims & Scope 网址（可选）</label><input type="url" name="journal_url" placeholder="https://...">
+      <label>该期刊的 AI 政策</label>
+      <div class="policy">
+        <label><input type="radio" name="ai_policy" value="none"> <span><b>不使用 AI</b> — 期刊禁止任何生成式 AI 协助审稿</span></label>
+        <label><input type="radio" name="ai_policy" value="local" checked> <span><b>仅本地 AI</b> — 只用本机模型，内容不出本机</span></label>
+        <label><input type="radio" name="ai_policy" value="remote"> <span><b>允许 Together AI</b> — 期刊允许；每次发送前仍需确认</span></label>
+      </div>
+      <label>备注（邮件要点等）</label><textarea name="memo" rows="2"></textarea>
+      <label>审稿文件（PDF 或 Word）</label>
+      <div class="drop" id="drop">拖放文件到这里，或点击选择</div>
+      <input type="file" name="file" accept=".pdf,.doc,.docx,.odt,.rtf" hidden>
+      <div class="actions"><button type="button" data-x>取消</button><button class="primary" type="submit">创建</button></div>
+    </form>`);
+  const form = $("#nf", m.el), drop = $("#drop", m.el), fi = $("input[type=file]", m.el);
+  drop.onclick = () => fi.click();
+  fi.onchange = () => drop.textContent = fi.files[0] ? "✓ " + fi.files[0].name : "拖放文件到这里，或点击选择";
+  drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
+  drop.ondragleave = () => drop.classList.remove("over");
+  drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("over"); fi.files = e.dataTransfer.files; fi.onchange(); };
+  $("[data-x]", m.el).onclick = m.close;
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const btn = $("button[type=submit]", form); btn.disabled = true; btn.textContent = "导入中…";
+    try {
+      const fd = new FormData(form);
+      if (!fi.files[0]) fd.delete("file");
+      const r = await api("/api/projects", { method: "POST", body: fd });
+      location.href = "/p/" + r.id;
+    } catch (err) { toast(err.message, true, 5000); btn.disabled = false; btn.textContent = "创建"; }
+  };
+};
+load();
+setInterval(load, 60000);
+</script>
+</body>
+</html>

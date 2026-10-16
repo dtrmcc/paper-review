@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>登录 · areview</title>
+<link rel="stylesheet" href="/static/app.css">
+<style>
+  body { display: flex; align-items: center; justify-content: center; min-height: 100vh;
+    background: linear-gradient(160deg, #eef2fb 0%, #f5f6f8 60%); }
+  .box { width: 100%; max-width: 380px; padding: 30px 30px 26px; margin: 16px; }
+  h1 { margin: 0 0 4px; font-size: 22px; }
+  .sub { color: var(--muted); margin-bottom: 18px; }
+  .err { background: var(--bad-soft); color: var(--bad); padding: 8px 10px; border-radius: 6px; margin-bottom: 10px; }
+  button.primary { width: 100%; margin-top: 18px; padding: 9px; font-weight: 600; }
+  .foot { margin-top: 16px; font-size: 12px; color: var(--muted); text-align: center; }
+</style>
+</head>
+<body>
+<form class="card box" method="post" action="/login" autocomplete="on">
+  <h1 class="brand">a<span>review</span></h1>
+  <div class="sub">审稿工作台 · 稿件仅保存在本机</div>
+  <div id="err" class="err hidden"></div>
+  <label for="u">用户名</label>
+  <input type="text" id="u" name="username" autocomplete="username" required autofocus>
+  <label for="p">密码</label>
+  <input type="password" id="p" name="password" autocomplete="current-password" required>
+  <button class="primary" type="submit">登录</button>
+  <div class="foot">Confidential manuscripts — authorised use only</div>
+</form>
+<script>
+  const e = new URLSearchParams(location.search).get("e");
+  if (e) { const el = document.getElementById("err"); el.classList.remove("hidden");
+    el.textContent = e === "locked" ? "失败次数过多，请 15 分钟后再试" : "用户名或密码不正确"; }
+</script>
+</body>
+</html>

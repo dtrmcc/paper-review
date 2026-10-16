@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>工具 · areview</title>
+<link rel="stylesheet" href="/static/app.css">
+<link rel="stylesheet" href="/static/workspace.css">
+</head>
+<body>
+<div class="topbar">
+  <a class="brand" href="/">a<span>review</span></a>
+  <a id="back" href="#">← 返回审稿</a>
+  <b id="name"></b><span class="muted" id="ptitle"></span>
+</div>
+<div class="page-wrap tool-page"><div id="body"></div></div>
+<script src="/static/common.js"></script>
+<script type="module">
+import { TOOL_LIST, renderTool } from "/static/toolviews.js";
+const [, , pid, , tool] = location.pathname.split("/");
+$("#back").href = "/p/" + pid;
+const t = TOOL_LIST.find((x) => x.id === tool);
+$("#name").textContent = t ? t.icon + " " + t.name : tool;
+const project = await api(`/api/projects/${pid}`);
+$("#ptitle").textContent = " · " + project.title;
+document.title = (t ? t.name : tool) + " · " + project.title;
+const ms = project.docs.filter((d) => d.kind === "manuscript");
+renderTool(tool, { pid: +pid, project, docs: project.docs, mainDoc: ms[ms.length - 1], api, toast,
+  jump: (n) => toast("请在审稿页面查看第 " + n + " 页") }, $("#body"));
+</script>
+</body>
+</html>
